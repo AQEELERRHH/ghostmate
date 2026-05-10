@@ -1,16 +1,15 @@
-# 👻♟️ GhostMate — Agent Chess on Miden
+# 👻♟️ GhostMate: Agent Chess on Miden
 
 > **Deploy your AI agent. Watch it play. You never touch a piece.**
 
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Built on Miden](https://img.shields.io/badge/built%20on-Miden-blueviolet)](https://polygon.technology/polygon-miden)
-[![Status](https://img.shields.io/badge/status-testnet%20%E2%80%94%20contracts%20in%20progress-orange)](https://ghostmate.vercel.app)
 
 ---
 
 ## What is GhostMate?
 
-GhostMate is an on-chain chess arena where players deploy autonomous AI agents instead of playing moves themselves. Each agent is a Miden smart account running a minimax engine with a private opening book — your strategy is yours alone, sealed in a zero-knowledge proof. Opponents challenge your agent, the GameContract validates every move, and the MatchRegistry tracks your ranking on a public leaderboard.
+GhostMate is an on-chain chess arena where players deploy autonomous AI agents instead of playing moves themselves. Each agent is a Miden smart account running a minimax engine with a private opening book your strategy is yours alone, sealed in a zero-knowledge proof. Opponents challenge your agent, the GameContract validates every move, and the MatchRegistry tracks your ranking on a public leaderboard.
 
 ---
 
@@ -18,9 +17,9 @@ GhostMate is an on-chain chess arena where players deploy autonomous AI agents i
 
 | Property | What it means for GhostMate |
 |---|---|
-| **Private account state** | Your agent's opening book and engine weights are stored privately — opponents see your moves, never your strategy |
+| **Private account state** | Your agent's opening book and engine weights are stored privately opponents see your moves, never your strategy |
 | **ZK proofs** | Every move is proven client-side and verified on-chain; no trust in a central server |
-| **Client-side proving** | The WASM prover runs in the browser, so games are fully self-sovereign — no backend required |
+| **Client-side proving** | The WASM prover runs in the browser, so games are fully self-sovereign no backend required |
 | **Account-native logic** | The chess engine lives inside an AccountComponent, not a separate contract; state transitions are atomic |
 
 ---
@@ -35,7 +34,7 @@ GhostMate is an on-chain chess arena where players deploy autonomous AI agents i
                            The GameContract mints a TurnNote and starts the clock
 
 3. Watch Your Ghost    →   Your agent receives TurnNotes, proves each move,
-                           and emits MoveNotes — autonomously, until checkmate
+                           and emits MoveNotes autonomously, until checkmate
 ```
 
 No wallet interaction needed after setup. The ghost plays while you sleep.
@@ -47,9 +46,9 @@ No wallet interaction needed after setup. The ghost plays while you sleep.
 | Layer | Technology |
 |---|---|
 | Smart contracts | [Miden](https://polygon.technology/polygon-miden) (MASM + `cargo-miden`) |
-| Contract logic | Rust (`no_std`) — chess engine, registry, game rules |
+| Contract logic | Rust (`no_std`) chess engine, registry, game rules |
 | Frontend | React 18 + TypeScript + Vite |
-| Miden SDK | `@miden-sdk/react` · `@miden-sdk/miden-sdk` · `@miden-sdk/miden-wallet-adapter-*` — v0.14 |
+| Miden SDK | `@miden-sdk/react` · `@miden-sdk/miden-sdk` · `@miden-sdk/miden-wallet-adapter-*` v0.14 |
 | Wallet | Miden browser extension via `MidenWalletAdapter` |
 | Hosting | Vercel |
 
@@ -64,11 +63,11 @@ ghostmate/
 ├── ghostmate-registry/       # no_std registry logic (leaderboard sort, game results)
 │
 ├── contracts/
-│   ├── agent-account/        # AgentAccount — opens/receives moves, runs engine
+│   ├── agent-account/        # AgentAccount opens/receives moves, runs engine
 │   ├── move-note/            # Note script delivering computed moves to the agent
 │   ├── agent-move-note/      # Note script consumed by GameContract (from/to/promo)
-│   ├── game-contract/        # GameContract — 64-sq board, move validation, wager
-│   ├── match-registry/       # MatchRegistry — registration, challenges, leaderboard
+│   ├── game-contract/        # GameContract 64-sq board, move validation, wager
+│   ├── match-registry/       # MatchRegistry registration, challenges, leaderboard
 │   └── result-note/          # ResultNote consumed by MatchRegistry on game end
 │
 ├── integration/              # 59 integration tests (agent, game, registry)
@@ -90,18 +89,18 @@ ghostmate/
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs) + `cargo-miden` — `cargo install cargo-miden`
+- [Rust](https://rustup.rs) + `cargo-miden` `cargo install cargo-miden`
 - [Node.js](https://nodejs.org) ≥ 20
 - [Miden wallet extension](https://chrome.google.com/webstore) installed in your browser
 
-### 1 — Run the test suite
+### 1 Run the test suite
 
 ```bash
 cargo test
 # 100 tests: 21 chess-engine, 20 registry-logic, 59 integration
 ```
 
-### 2 — Start the frontend dev server
+### 2 Start the frontend dev server
 
 ```bash
 cd ghostmate-web
@@ -110,7 +109,7 @@ npm run dev
 # → http://localhost:5173
 ```
 
-### 3 — Build for production
+### 3 Build for production
 
 ```bash
 cd ghostmate-web
@@ -137,13 +136,13 @@ Defaults (`testnet`) are used when unset.
 
 **[ghostmate.vercel.app](https://ghostmate.vercel.app)**
 
-> Miden testnet — connect the Miden browser extension, register your agent, and challenge opponents on the leaderboard.
+> Miden testnet connect the Miden browser extension, register your agent, and challenge opponents on the leaderboard.
 
 ---
 
 ## Status
 
-**Testnet — contracts deployment in progress.**
+**Testnet contracts deployment in progress.**
 
 | Component | Status |
 |---|---|
@@ -156,7 +155,7 @@ Defaults (`testnet`) are used when unset.
 
 ## Built On
 
-Built on **[@0xMiden](https://twitter.com/0xMiden)** — the privacy-first ZK rollup.
+Built on **[@0xMiden](https://twitter.com/0xMiden)** the privacy-first ZK rollup.
 
 ---
 
