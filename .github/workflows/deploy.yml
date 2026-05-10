@@ -1,0 +1,174 @@
+name: Deploy Contracts & Frontend
+
+# Trigger manually (workflow_dispatch) or automatically when contracts or the
+# web app change on main. The contract jobs gate the frontend job so that
+# VITE_REGISTRY_ID is always wired to the freshly-deployed address.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'ghostmate-chess/**'
+      - 'ghostmate-web/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+# ── Job 1: compile & deploy all Miden contracts ───────────────────────────────
+jobs:
+  deploy-contracts:
+    name: Build & Deploy Contracts
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      actions: write   # needed for `gh variable set REGISTRY_ID`
+
+    outputs:
+      registry_id: ${{ steps.parse-addresses.outputs.registry_id }}
+      agent_id:    ${{ steps.parse-addresses.outputs.agent_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # dtolnay/rust-toolchain reads channel="nightly"; Rust ≥1.92 is available
+      # on any recent nightly. wasm32-unknown-unknown + rust-src are required by
+      # cargo-miden to compile contracts to the component model WASM target.
+      - name: Install Rust nightly + wasm32 target
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      # Cache the Cargo registry and compiled build artefacts so that
+      # repeated runs don't re-download the entire dependency tree.
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('contracts/**/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      # Cache the compiled cargo-miden tool binary keyed by version so that
+      # cargo install only compiles it once per version change.
+      - name: Cache installed Cargo binaries
+        uses: actions/cache@v4
+        id: cache-cargo-bins
+        with:
+          path: ~/.cargo/bin
+          key: cargo-bins-${{ runner.os }}-cargo-miden-0.8.1
+
+      - name: Install cargo-miden v0.8.1
+        if: steps.cache-cargo-bins.outputs.cache-hit != 'true'
+        run: cargo install cargo-miden --version 0.8.1 --locked
+
+      # Cache compiled contract artefacts keyed by contract source.
+      - name: Cache contract build artefacts
+        uses: actions/cache@v4
+        with:
+          path: contracts/*/target
+          key: contract-target-${{ runner.os }}-${{ hashFiles('contracts/**/*.rs', 'contracts/**/Cargo.toml', 'ghostmate-chess/src/**') }}
+          restore-keys: contract-target-${{ runner.os }}-
+
+      # Build every contract under contracts/ in dependency order.
+      # agent-account depends on ghostmate-chess so it compiles last;
+      # alphabetical sort is correct here (agent > game > match > move > result).
+      - name: Build all contracts
+        run: |
+          for dir in contracts/*/; do
+            name=$(basename "$dir")
+            echo "::group::cargo miden build — $name"
+            cargo miden build --manifest-path "$dir/Cargo.toml" --release
+            echo "::endgroup::"
+          done
+
+      # The deploy-ghostmate Rust crate uses the miden-client SDK directly
+      # (ClientBuilder + SqliteStore + FilesystemKeyStore + AccountBuilder +
+      # AuthFalcon512Rpo) to create on-chain accounts from the compiled WASM
+      # artefacts and writes deployed-addresses.json with both IDs.
+      # No separate miden CLI or pre-funded deployer key is required.
+      - name: Run deploy-ghostmate
+        run: cargo run -p deploy-ghostmate
+
+      # Parse both IDs from the JSON file written by the deploy script and
+      # surface them as job outputs for the frontend job.
+      - name: Parse deployed addresses
+        id: parse-addresses
+        run: |
+          REGISTRY_ID=$(jq -r '.VITE_REGISTRY_ID' deployed-addresses.json)
+          AGENT_ID=$(jq -r '.VITE_AGENT_ACCOUNT_ID' deployed-addresses.json)
+          echo "registry_id=$REGISTRY_ID" >> "$GITHUB_OUTPUT"
+          echo "agent_id=$AGENT_ID"       >> "$GITHUB_OUTPUT"
+          echo "✓ MatchRegistry  → $REGISTRY_ID"
+          echo "✓ AgentAccount   → $AGENT_ID"
+
+      # Persist REGISTRY_ID as a GitHub Actions repository variable so that
+      # deploy-frontend.yml can read it on subsequent frontend-only pushes
+      # without re-running a contract deployment.
+      - name: Save registry ID to GitHub Variables
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_ID: ${{ steps.parse-addresses.outputs.registry_id }}
+        run: |
+          gh variable set REGISTRY_ID --body "$REGISTRY_ID" \
+            --repo "$GITHUB_REPOSITORY" || true
+
+# ── Job 2: build the React app and ship to Vercel ─────────────────────────────
+  deploy-frontend:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-contracts
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ghostmate-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ghostmate-web
+        run: npm ci
+
+      # VITE_REGISTRY_ID is baked into the JS bundle at build time so it must
+      # be injected here, not at runtime. It comes from the upstream job output.
+      - name: Build
+        working-directory: ghostmate-web
+        env:
+          VITE_REGISTRY_ID:  ${{ needs.deploy-contracts.outputs.registry_id }}
+          VITE_RPC_URL:      testnet
+          VITE_PROVER_URL:   testnet
+        run: npm run build
+
+      # Convert dist/ into Vercel's Build Output API v3 format so we can use
+      # `vercel deploy --prebuilt` and guarantee the Vercel build runs here
+      # (where we have VITE_REGISTRY_ID) rather than inside Vercel's pipeline.
+      - name: Prepare Vercel output structure
+        working-directory: ghostmate-web
+        run: |
+          mkdir -p .vercel/output/static
+          cp -r dist/. .vercel/output/static/
+          printf '{"version":3}' > .vercel/output/config.json
+
+      - name: Deploy to Vercel
+        working-directory: ghostmate-web
+        env:
+          VERCEL_TOKEN:      ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npm install --global vercel@latest --silent
+          mkdir -p .vercel
+          printf '{"projectId":"%s","orgId":"%s"}' \
+            "$VERCEL_PROJECT_ID" "$VERCEL_ORG_ID" \
+            > .vercel/project.json
+          vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN" --yes

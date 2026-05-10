@@ -1,0 +1,18 @@
+[package]
+name = "agent-account"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+miden = { version = "0.12" }
+ghostmate-chess = { path = "../../ghostmate-chess" }
+
+[package.metadata.component]
+package = "miden:agent-account"
+
+[package.metadata.miden]
+project-kind = "account"
+supported-types = ["RegularAccountImmutableCode"]

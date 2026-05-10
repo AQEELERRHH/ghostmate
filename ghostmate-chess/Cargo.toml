@@ -1,0 +1,8 @@
+[package]
+name = "ghostmate-chess"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# No features needed; std is only available in test builds via cfg_attr.
+default = []

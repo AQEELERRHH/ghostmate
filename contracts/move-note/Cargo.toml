@@ -1,0 +1,23 @@
+[package]
+name = "move-note"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+miden = { version = "0.12" }
+
+[package.metadata.component]
+package = "miden:move-note"
+
+# Cross-component link so the note script can call AgentAccount methods.
+[package.metadata.miden.dependencies]
+"miden:agent-account" = { path = "../agent-account" }
+
+[package.metadata.component.target.dependencies]
+"miden:agent-account" = { path = "../agent-account/target/generated-wit/" }
+
+[package.metadata.miden]
+project-kind = "note-script"

@@ -1,0 +1,23 @@
+[package]
+name = "result-note"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+miden = { version = "0.12" }
+
+[package.metadata.component]
+package = "miden:result-note"
+
+# Cross-component link: this note script calls match_registry::record_game_result()
+[package.metadata.miden.dependencies]
+"miden:match-registry" = { path = "../match-registry" }
+
+[package.metadata.component.target.dependencies]
+"miden:match-registry" = { path = "../match-registry/target/generated-wit/" }
+
+[package.metadata.miden]
+project-kind = "note-script"

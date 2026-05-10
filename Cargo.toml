@@ -1,0 +1,13 @@
+[workspace]
+members = [ "deploy-ghostmate",
+    "ghostmate-chess",
+    "ghostmate-registry",
+    "integration",
+]
+exclude = [
+    "contracts/",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
