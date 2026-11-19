@@ -2,10 +2,13 @@
 // Fill these in after running `cargo miden run` / `cargo miden deploy`.
 
 export const REGISTRY_ID =
-  import.meta.env.VITE_REGISTRY_ID ?? "0x0000000000000000";
+  import.meta.env.VITE_REGISTRY_ID ?? "0x78399bfc804c16512711ff72305db3";
 
 export const WAGER_FAUCET_ID =
   import.meta.env.VITE_WAGER_FAUCET_ID ?? "0x0000000000000000";
+
+// Compiled register-note script, served statically from public/packages.
+export const REGISTER_NOTE_PKG_URL = "/packages/register-note.masp";
 
 // ── Miden network ─────────────────────────────────────────────────────────────
 export const MIDEN_CONFIG = {
@@ -20,20 +23,26 @@ export const MIDEN_CONFIG = {
     | "devnet"
     | string,
   autoSyncInterval: 15_000,
+  // Required: registration executes a transaction AS the imported registry
+  // account. The default worker shim keeps a separate SMT forest per thread and
+  // fails with "account data wasn't found" for imported accounts (web-sdk#222).
+  useWorker: false,
 } as const;
 
 // ── Storage slot names (snake_case of package + struct + field) ───────────────
 // Package: miden:match-registry → miden_match_registry
 // Struct:  MatchRegistry        → match_registry
+// Namespace confirmed on-chain: match_registry::match_registry::<field>
 export const SLOTS = {
-  agentName:       "miden_match_registry::match_registry::agents_name",
-  agentStats:      "miden_match_registry::match_registry::agents_stats",
-  challenges:      "miden_match_registry::match_registry::challenges",
-  challengeAssets: "miden_match_registry::match_registry::challenge_assets",
-  games:           "miden_match_registry::match_registry::games",
-  agentCount:      "miden_match_registry::match_registry::agent_count",
-  challengeCount:  "miden_match_registry::match_registry::challenge_count",
-  gameCount:       "miden_match_registry::match_registry::game_count",
+  agentName:       "match_registry::match_registry::agents_name",
+  agentStats:      "match_registry::match_registry::agents_stats",
+  agentIds:        "match_registry::match_registry::agent_ids",
+  agentCount:      "match_registry::match_registry::agent_count",
+  challenges:      "match_registry::match_registry::challenges",
+  challengeAssets: "match_registry::match_registry::challenge_assets",
+  games:           "match_registry::match_registry::games",
+  challengeCount:  "match_registry::match_registry::challenge_count",
+  gameCount:       "match_registry::match_registry::game_count",
 } as const;
 
 // ── Result-note storage layout ────────────────────────────────────────────────

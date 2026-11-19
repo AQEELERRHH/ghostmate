@@ -15,8 +15,6 @@ export function Challenges() {
   const { waitForCommit }                                                         = useWaitForCommit();
 
   const [postWager,   setPostWager]   = useState('');
-  const [pendingId,   setPendingId]   = useState<bigint | null>(null);
-  const [postLoading, setPostLoading] = useState(false);
   const [postError,   setPostError]   = useState<string | null>(null);
 
   const connected = wallets.length > 0;
@@ -25,7 +23,6 @@ export function Challenges() {
   // ── Post a new challenge ──────────────────────────────────────────────────────
   const handlePost = async () => {
     if (!myWallet) return;
-    setPostLoading(true);
     setPostError(null);
     const wager     = BigInt(Math.round(parseFloat(postWager || '0') * 1_000_000));
     const accountId = myWallet.id().toString();
@@ -50,30 +47,23 @@ export function Challenges() {
       }
     } catch (err) {
       setPostError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPostLoading(false);
     }
   };
 
   // ── Accept a challenge ────────────────────────────────────────────────────────
   const handleAccept = async (challenge: ChallengeRecord) => {
     if (!myWallet) return;
-    setPendingId(challenge.id);
     const accountId = myWallet.id().toString();
 
-    try {
-      const result = await execute({
-        accountId,
-        request: async (_client) => {
-          throw new Error('Connect to deployed MatchRegistry to accept challenges');
-        },
-      });
-      if (result) {
-        await waitForCommit(result.transactionId, { timeoutMs: 30_000 });
-        upsertChallenge(challenge.id, challenge.challengerPrefix, challenge.wagerAmount, CHALLENGE_STATUS.ACCEPTED);
-      }
-    } finally {
-      setPendingId(null);
+    const result = await execute({
+      accountId,
+      request: async (_client) => {
+        throw new Error('Connect to deployed MatchRegistry to accept challenges');
+      },
+    });
+    if (result) {
+      await waitForCommit(result.transactionId, { timeoutMs: 30_000 });
+      upsertChallenge(challenge.id, challenge.challengerPrefix, challenge.wagerAmount, CHALLENGE_STATUS.ACCEPTED);
     }
   };
 
@@ -92,6 +82,16 @@ export function Challenges() {
       </div>
 
       {error && <div className="alert-error">{error}</div>}
+
+      <div
+        className="alert-info"
+        style={{ borderColor: '#FF6B00', background: 'rgba(255,107,0,0.06)' }}
+      >
+        <strong>⚠️ CHALLENGES — COMING SOON.</strong> On-chain challenges with
+        USDCx wagers require a secure, full-identity contract redesign that is a
+        separate milestone. <strong>Agent registration (Register page) is live;</strong>{' '}
+        posting and accepting challenges is disabled until the wager-safe version ships.
+      </div>
 
       {/* Post new challenge */}
       {connected && (
@@ -113,9 +113,10 @@ export function Challenges() {
             <button
               className="btn btn-primary"
               onClick={handlePost}
-              disabled={postLoading}
+              disabled
+              title="Challenges are not enabled yet"
             >
-              {postLoading ? 'POSTING…' : 'POST CHALLENGE'}
+              COMING SOON
             </button>
           </div>
           {postError && <div className="alert-error" style={{ marginTop: 12 }}>{postError}</div>}
@@ -146,7 +147,6 @@ export function Challenges() {
               {challenges.map(ch => {
                 const isMine = myWallet
                   && ch.challengerPrefix.toString(16) === myWallet.id().toString().replace(/^0x/, '').slice(0, 16);
-                const accepting = pendingId === ch.id;
 
                 return (
                   <tr key={ch.id.toString()} className="challenge-row">
@@ -164,9 +164,10 @@ export function Challenges() {
                         <button
                           className="btn btn-orange-outline btn-sm"
                           onClick={() => handleAccept(ch)}
-                          disabled={!connected || accepting || txLoading}
+                          disabled
+                          title="Challenges are not enabled yet"
                         >
-                          {accepting ? 'ACCEPTING…' : 'ACCEPT'}
+                          SOON
                         </button>
                       )}
                     </td>

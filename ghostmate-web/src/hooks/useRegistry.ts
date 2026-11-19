@@ -1,7 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMiden, useMidenClient, useNoteStream, useSyncState } from "@miden-sdk/react";
-import { REGISTRY_ID } from "../config";
-import { agentScore } from "../chess";
+import { AccountId, Word, type WasmWebClient } from "@miden-sdk/miden-sdk";
+import { REGISTRY_ID, SLOTS } from "../config";
+import { agentScore, decodeName } from "../chess";
+
+// Reads every registered agent straight from the registry's storage maps:
+// agent_count → agent_ids[i] → agents_name/agents_stats[key].
+async function readAgentsFromChain(client: WasmWebClient): Promise<AgentRecord[]> {
+  const id = AccountId.fromHex(REGISTRY_ID);
+  if (!(await client.getAccount(id))) {
+    await client.importAccountById(id);
+  }
+  await client.syncState();
+  const account = await client.getAccount(id);
+  if (!account) return [];
+
+  const storage = account.storage();
+  const countWord = storage.getItem(SLOTS.agentCount);
+  const count = countWord ? (countWord.toU64s()[0] ?? 0n) : 0n;
+
+  const agents: AgentRecord[] = [];
+  for (let i = 0n; i < count; i++) {
+    const ordinalKey = new Word(new BigUint64Array([i, 0n, 0n, 0n]));
+    const agentKey = storage.getMapItem(SLOTS.agentIds, ordinalKey);
+    if (!agentKey) continue;
+
+    const nameWord = storage.getMapItem(SLOTS.agentName, agentKey);
+    const statsWord = storage.getMapItem(SLOTS.agentStats, agentKey);
+    const nameFelts = nameWord ? Array.from(nameWord.toU64s()) : [];
+    const stats = statsWord
+      ? Array.from(statsWord.toU64s())
+      : [0n, 0n, 0n, 0n];
+
+    const prefix = Array.from(agentKey.toU64s())[0] ?? 0n;
+    const wins = stats[0] ?? 0n;
+    const losses = stats[1] ?? 0n;
+    const draws = stats[2] ?? 0n;
+
+    agents.push({
+      prefix,
+      name: decodeName(nameFelts) || `Agent ${i}`,
+      wins,
+      losses,
+      draws,
+      score: agentScore(wins, draws),
+    });
+  }
+
+  agents.sort((a, b) => (b.score > a.score ? 1 : b.score < a.score ? -1 : 0));
+  return agents;
+}
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -64,7 +112,7 @@ function saveCache(c: CacheShape) {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useRegistry() {
-  const { runExclusive } = useMiden();
+  const { runExclusive, client } = useMiden();
   const { sync } = useSyncState();
   const [agents,     setAgents]     = useState<AgentRecord[]>([]);
   const [challenges, setChallenges] = useState<ChallengeRecord[]>([]);
@@ -114,21 +162,19 @@ export function useRegistry() {
     setError(null);
     try {
       await sync();
-      await runExclusive(async () => {
-        // TODO: When the Miden web client exposes a storage-map query API,
-        // replace this section with real chain reads using:
-        //   const client = useMidenClient();
-        //   const stats = await client.getAccountStorageItem(REGISTRY_ID, SLOTS.agentStats, key);
-        //
-        // For now we rely on note streaming (below) to discover agents/games.
-      });
+      // Challenges / games still come from the local cache (their secure
+      // on-chain flow is a future milestone); agents are read from the chain.
       rebuildFromCache();
+      if (client) {
+        const chainAgents = await runExclusive(() => readAgentsFromChain(client));
+        setAgents(chainAgents);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoading(false);
     }
-  }, [sync, runExclusive, rebuildFromCache]);
+  }, [sync, runExclusive, rebuildFromCache, client]);
 
   // Initial load ----------------------------------------------------------------
   useEffect(() => {
