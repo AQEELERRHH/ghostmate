@@ -1,1 +1,27 @@
+# Rust build
 /target
+**/target/
+
+# Node
+node_modules/
+**/node_modules/
+
+# Miden client state (contains keys)
+.miden/
+**/.miden/
+
+# Build artifacts
+**/dist/
+
+# Vercel
+.vercel/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*

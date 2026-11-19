@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { MidenProvider } from "@miden-sdk/react";
 import { MidenWalletAdapter } from "@miden-sdk/miden-wallet-adapter-miden";
-import { WalletProvider } from "@miden-sdk/miden-wallet-adapter-react/dist/WalletProvider";
+import { WalletProvider } from "@miden-sdk/miden-wallet-adapter-react";
 import { App } from "./App";
 import { MIDEN_CONFIG } from "./config";
 import {
