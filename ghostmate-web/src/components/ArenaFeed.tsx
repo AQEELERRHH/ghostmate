@@ -1,39 +1,12 @@
-import { useState, useEffect } from 'react';
-
-const SEED_EVENTS = [
-  { a: 'NEURALREAPER', b: 'ROOK-X',      result: 'defeated',  ago: '1m'  },
-  { a: 'BISHOP-7',     b: 'ENDGAME',     result: 'drew with', ago: '3m'  },
-  { a: 'DEEPTHOUGHT',  b: 'PAWN-STORM',  result: 'defeated',  ago: '7m'  },
-  { a: 'QUEEN-ZERO',   b: 'GHOST-V2',    result: 'defeated',  ago: '12m' },
-  { a: 'ROOK-X',       b: 'CALCULUS',    result: 'drew with', ago: '15m' },
-  { a: 'ENDGAME',      b: 'NEURALREAPER',result: 'defeated',  ago: '22m' },
-];
-
-interface FeedEvent {
-  a: string;
-  b: string;
-  result: string;
-  ago: string;
-}
+import { useRegistry } from '../hooks/useRegistry';
 
 export function ArenaFeed() {
-  const [events, setEvents] = useState<FeedEvent[]>(SEED_EVENTS);
+  const { games } = useRegistry();
 
-  useEffect(() => {
-    const names = [
-      'NEURALREAPER', 'ROOK-X', 'BISHOP-7', 'DEEPTHOUGHT',
-      'PAWN-STORM', 'QUEEN-ZERO', 'GHOST-V2', 'CALCULUS',
-      'ENDGAME', 'PHANTOM-9',
-    ];
-    const interval = setInterval(() => {
-      const a = names[Math.floor(Math.random() * names.length)];
-      let b = names[Math.floor(Math.random() * names.length)];
-      while (b === a) b = names[Math.floor(Math.random() * names.length)];
-      const result = Math.random() > 0.3 ? 'defeated' : 'drew with';
-      setEvents(prev => [{ a, b, result, ago: 'just now' }, ...prev.slice(0, 7)]);
-    }, 12000);
-    return () => clearInterval(interval);
-  }, []);
+  // Most recent 8 games (higher game ID = more recent)
+  const recent = [...games]
+    .sort((a, b) => (b.id > a.id ? 1 : -1))
+    .slice(0, 8);
 
   return (
     <div className="arena-feed">
@@ -42,17 +15,58 @@ export function ArenaFeed() {
         ARENA FEED
       </div>
       <div className="feed-scroll">
-        {events.map((e, i) => (
-          <div key={i} className="feed-item">
-            <span style={{ color: 'white', fontWeight: 600 }}>{e.a}</span>
-            {' '}
-            <span style={{ color: '#666666' }}>{e.result}</span>
-            {' '}
-            <span style={{ color: 'white', fontWeight: 600 }}>{e.b}</span>
-            {' — '}
-            <span className="feed-time">{e.ago}</span>
+        {recent.length === 0 ? (
+          <div className="feed-item" style={{ color: '#555555' }}>
+            No games yet. Register an agent and post a challenge to start one.
           </div>
-        ))}
+        ) : (
+          recent.map(g => {
+            // status: 0=active, 1=white_wins, 2=black_wins, 3=draw
+            if (g.status === 0n) {
+              return (
+                <div key={g.id.toString()} className="feed-item">
+                  <span style={{ color: 'white', fontWeight: 600 }}>{g.whiteName}</span>
+                  {' '}
+                  <span style={{ color: '#FF6B00' }}>vs</span>
+                  {' '}
+                  <span style={{ color: 'white', fontWeight: 600 }}>{g.blackName}</span>
+                  {' — '}
+                  <span className="feed-time">playing</span>
+                </div>
+              );
+            }
+
+            if (g.status === 3n) {
+              return (
+                <div key={g.id.toString()} className="feed-item">
+                  <span style={{ color: 'white', fontWeight: 600 }}>{g.whiteName}</span>
+                  {' '}
+                  <span style={{ color: '#666666' }}>drew with</span>
+                  {' '}
+                  <span style={{ color: 'white', fontWeight: 600 }}>{g.blackName}</span>
+                  {' — '}
+                  <span className="feed-time">#{g.id.toString()}</span>
+                </div>
+              );
+            }
+
+            const whiteWon = g.status === 1n;
+            const winner   = whiteWon ? g.whiteName : g.blackName;
+            const loser    = whiteWon ? g.blackName : g.whiteName;
+
+            return (
+              <div key={g.id.toString()} className="feed-item">
+                <span style={{ color: 'white', fontWeight: 600 }}>{winner}</span>
+                {' '}
+                <span style={{ color: '#666666' }}>defeated</span>
+                {' '}
+                <span style={{ color: 'white', fontWeight: 600 }}>{loser}</span>
+                {' — '}
+                <span className="feed-time">#{g.id.toString()}</span>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -199,7 +199,7 @@ export function Register() {
           </p>
           <input
             className="text-input"
-            placeholder="e.g. NEURALREAPER"
+            placeholder="Choose an agent name"
             maxLength={32}
             value={agentName}
             onChange={e => setAgentName(e.target.value.toUpperCase())}

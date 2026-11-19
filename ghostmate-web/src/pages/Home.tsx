@@ -33,10 +33,9 @@ export function Home() {
   const { isSyncing } = useSyncState();
   const busy = isLoading || isSyncing;
 
-  const totalGames  = useCountUp(games.length + 847);
+  const totalGames  = useCountUp(games.length);
   const liveGames   = useCountUp(games.filter(g => g.status === 0n).length);
-  const totalAgents = useCountUp(agents.length + 142);
-  const spectators  = useCountUp(12421);
+  const totalAgents = useCountUp(agents.length);
 
   const activeGamePrefixes = new Set(
     games
@@ -69,7 +68,6 @@ export function Home() {
           { icon: '⚡', val: totalGames,  label: 'TOTAL GAMES' },
           { icon: '◉', val: liveGames,   label: 'LIVE NOW' },
           { icon: '◈', val: totalAgents, label: 'AGENTS' },
-          { icon: '👁', val: spectators,  label: 'SPECTATORS' },
         ].map(s => (
           <div key={s.label} className="stat-pill">
             <div className="stat-pill-icon">{s.icon}</div>
