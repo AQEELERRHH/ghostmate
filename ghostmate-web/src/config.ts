@@ -1,8 +1,61 @@
 // ── Deployed contract addresses ───────────────────────────────────────────────
-// Fill these in after running `cargo miden run` / `cargo miden deploy`.
+// CANONICAL registry id — this file is the ONLY source of truth. It is
+// deliberately NOT read from env: a stale committed .env.local once silently
+// pointed local dev at an abandoned registry. VITE_REGISTRY_ID is ignored.
+//
+// Phase 2D.1 secure MatchRegistry, deployed 2026-11-20 on testnet v0.17:
+// AuthNetworkAccount, immutable allowlist (register-note + P2ID). Only the
+// network operator executes its transactions. Name on-chain: GHOSTMATE-2D1.
+// /deployed-addresses.json mirrors these values — update both together.
+export const REGISTRY_ID = "0xe67e1b121c63d791380938be496ba1";
+export const REGISTRY_BECH32 = "mtst1arn8uxcjr33a0yfcpyutujtt5yj4n82e";
 
-export const REGISTRY_ID =
-  import.meta.env.VITE_REGISTRY_ID ?? "0x78399bfc804c16512711ff72305db3";
+/**
+ * Fail-fast startup check: REGISTRY_BECH32 must decode (valid bech32, "mtst"
+ * testnet prefix, valid checksum) to exactly REGISTRY_ID. Pure JS so it runs
+ * before WASM loads. Throws with a readable message on any mismatch.
+ * Miden addresses use bech32m (BIP-350), not classic bech32.
+ */
+export function assertRegistryConfig(): void {
+  const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+  const hex = REGISTRY_ID.toLowerCase();
+  if (!/^0x[0-9a-f]{30}$/.test(hex)) {
+    throw new Error(`REGISTRY_ID "${REGISTRY_ID}" is not a 15-byte hex account id.`);
+  }
+  const addr = REGISTRY_BECH32.toLowerCase().split("_")[0];
+  const sep = addr.lastIndexOf("1");
+  const hrp = addr.slice(0, sep);
+  if (hrp !== "mtst") {
+    throw new Error(`REGISTRY_BECH32 has prefix "${hrp}", expected testnet "mtst".`);
+  }
+  const values = [...addr.slice(sep + 1)].map((c) => CHARSET.indexOf(c));
+  if (values.length < 7 || values.includes(-1)) {
+    throw new Error("REGISTRY_BECH32 is not valid bech32.");
+  }
+  // bech32m checksum (BIP-350): polymod of expanded hrp + data must equal
+  // 0x2bc830a3 (classic bech32 would be 1 — Miden uses bech32m).
+  const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let chk = 1;
+  const expanded = [...hrp].map((c) => c.charCodeAt(0) >> 5)
+    .concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31), values);
+  for (const v of expanded) {
+    const top = chk >>> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) if ((top >>> i) & 1) chk ^= GEN[i];
+  }
+  if (chk !== 0x2bc830a3) throw new Error("REGISTRY_BECH32 checksum is invalid.");
+  // 5-bit groups -> bytes; payload = [address-type byte, 15-byte account id].
+  const bytes: number[] = [];
+  let acc = 0, bits = 0;
+  for (const v of values.slice(0, -6)) {
+    acc = (acc << 5) | v; bits += 5;
+    while (bits >= 8) { bits -= 8; bytes.push((acc >> bits) & 0xff); }
+  }
+  const idHex = "0x" + bytes.slice(-15).map((b) => b.toString(16).padStart(2, "0")).join("");
+  if (bytes.length !== 16 || idHex !== hex) {
+    throw new Error(`REGISTRY_BECH32 decodes to ${idHex}, but REGISTRY_ID is ${hex}.`);
+  }
+}
 
 export const WAGER_FAUCET_ID =
   import.meta.env.VITE_WAGER_FAUCET_ID ?? "0x0000000000000000";
@@ -23,9 +76,9 @@ export const MIDEN_CONFIG = {
     | "devnet"
     | string,
   autoSyncInterval: 15_000,
-  // Required: registration executes a transaction AS the imported registry
-  // account. The default worker shim keeps a separate SMT forest per thread and
-  // fails with "account data wasn't found" for imported accounts (web-sdk#222).
+  // Phase 2C.2 needed this to execute AS the imported registry (web-sdk#222).
+  // Since 2D.1 the network operator executes registry txs, so it may no longer
+  // be needed — kept OFF until that is verified separately (no change here).
   useWorker: false,
 } as const;
 

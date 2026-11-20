@@ -51,6 +51,35 @@ async function readAgentsFromChain(client: WasmWebClient): Promise<AgentRecord[]
   return agents;
 }
 
+/**
+ * Reads the registered display name for one agent straight from the registry's
+ * storage, or null if that agent is not registered. Agents are keyed by their
+ * full account id [prefix, suffix, 0, 0]. Used to poll for the network
+ * operator having processed a register-note.
+ */
+export async function readAgentName(
+  client: WasmWebClient,
+  agentId: string,
+): Promise<string | null> {
+  const id = AccountId.fromHex(REGISTRY_ID);
+  if (!(await client.getAccount(id))) {
+    await client.importAccountById(id);
+  }
+  await client.syncState();
+  const account = await client.getAccount(id);
+  if (!account) return null;
+
+  const agent = AccountId.fromHex(agentId);
+  const key = new Word(new BigUint64Array([
+    agent.prefix().asInt(), agent.suffix().asInt(), 0n, 0n,
+  ]));
+  const statsWord = account.storage().getMapItem(SLOTS.agentStats, key);
+  const registered = statsWord ? (statsWord.toU64s()[3] ?? 0n) === 1n : false;
+  if (!registered) return null;
+  const nameWord = account.storage().getMapItem(SLOTS.agentName, key);
+  return nameWord ? decodeName(Array.from(nameWord.toU64s())) : "";
+}
+
 // ── Domain types ──────────────────────────────────────────────────────────────
 
 export interface AgentRecord {
@@ -82,7 +111,8 @@ export interface GameRecord {
 
 // ── Persistent cache (localStorage) ──────────────────────────────────────────
 
-const CACHE_KEY = "ghostmate:registry";
+// Keyed by registry id so a redeploy never shows the previous registry's data.
+const CACHE_KEY = `ghostmate:registry:${REGISTRY_ID}`;
 
 interface CacheShape {
   agents:     Record<string, { name: string; wins: string; losses: string; draws: string }>;
