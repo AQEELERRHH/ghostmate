@@ -25,3 +25,10 @@ node_modules/
 # Logs
 *.log
 npm-debug.log*
+
+# Local env overrides — never commit (a committed .env.local once pointed dev
+# at an abandoned registry). See ghostmate-web/.env.example.
+.env.local
+.env.*.local
+**/.env.local
+**/.env.*.local

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSyncState } from '@miden-sdk/react';
 import { useRegistry } from '../hooks/useRegistry';
+import { SecureRebuildNotice } from '../components/SecureRebuildNotice';
 import { AgentAvatar } from '../components/AgentAvatar';
 import {
   computeElo,
@@ -59,6 +60,8 @@ export function Home() {
           {busy ? 'SYNCING…' : '↻ REFRESH'}
         </button>
       </div>
+
+      <SecureRebuildNotice showLink />
 
       {error && <div className="alert-error">{error}</div>}
 

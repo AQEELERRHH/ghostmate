@@ -5,20 +5,24 @@ import {
   useWaitForNotes,
   useConsume,
   useTransaction,
-  useImportAccount,
   useWaitForCommit,
   useSyncState,
   useMiden,
 } from '@miden-sdk/react';
 import { AccountId, NoteArray } from '@miden-sdk/miden-sdk';
 import { TxStatus } from '../components/TxStatus';
-import { useRegistry } from '../hooks/useRegistry';
+import { SecureRebuildNotice } from '../components/SecureRebuildNotice';
+import { useRegistry, readAgentName } from '../hooks/useRegistry';
 import { buildRegisterNote } from '../lib/registerNote';
 import { REGISTRY_ID } from '../config';
+import { decodeName, encodeName } from '../chess';
 
 // Namespaced so future multi-account UI can coexist cleanly.
 const AGENT_KEY = 'ghostmate:agent_account_id';
 const FAUCET_URL = 'https://faucet.testnet.miden.io/';
+// The network operator usually consumes the register-note ~10s after commit.
+const OPERATOR_TIMEOUT_MS = 180_000;
+const OPERATOR_POLL_MS = 5_000;
 
 function humanError(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -27,12 +31,11 @@ function humanError(err: unknown): string {
 }
 
 export function Register() {
-  const { client }                                       = useMiden();
+  const { client, runExclusive }                         = useMiden();
   const { createWallet, isCreating }                     = useCreateWallet();
   const { waitForConsumableNotes }                       = useWaitForNotes();
   const { consume }                                      = useConsume();
   const { execute, stage, isLoading: txLoading, error: txError, reset: resetTx } = useTransaction();
-  const { importAccount }                                = useImportAccount();
   const { waitForCommit }                                = useWaitForCommit();
   const { sync }                                         = useSyncState();
   const { refresh }                                      = useRegistry();
@@ -94,24 +97,6 @@ export function Register() {
     }
   }, [client, agentId]);
 
-  // ── Consume the register-note AS the registry, retrying on state conflicts ──
-  const consumeAsRegistry = useCallback(async (noteId: string) => {
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      try {
-        await sync();
-        const rc = await consume({ accountId: REGISTRY_ID, notes: [noteId] });
-        if (rc?.transactionId) {
-          await waitForCommit(rc.transactionId, { timeoutMs: 60_000 });
-        }
-        return;
-      } catch (err) {
-        if (attempt === 5) throw err;
-        setStatus(`Registry is busy — retrying (${attempt}/5)…`);
-        await new Promise((r) => setTimeout(r, 1500 * attempt));
-      }
-    }
-  }, [sync, consume, waitForCommit]);
-
   // ── Full registration flow ──────────────────────────────────────────────────
   const handleRegister = useCallback(async () => {
     if (!client || !agentId || !agentName.trim()) return;
@@ -122,20 +107,26 @@ export function Register() {
       await sync();
 
       // 1. Fund + commit the agent account by consuming its faucet note(s).
-      setStatus('Waiting for faucet funds to arrive at your agent account…');
-      const faucetNotes = await waitForConsumableNotes({
-        accountId: agentId,
-        minCount: 1,
-        timeoutMs: 600_000,
-      });
-      setStatus('Claiming funds into your agent account…');
-      await consume({
-        accountId: agentId,
-        notes: faucetNotes.map((n) => n.inputNoteRecord()),
-      });
-      await sync();
+      //    Skipped for an agent that is already on-chain (nonce > 0) — e.g.
+      //    re-registering an existing agent on the new secure registry.
+      const local = await client.getAccount(AccountId.fromHex(agentId));
+      const onChain = !!local && local.nonce().asInt() > 0n;
+      if (!onChain) {
+        setStatus('Waiting for faucet funds to arrive at your agent account…');
+        const faucetNotes = await waitForConsumableNotes({
+          accountId: agentId,
+          minCount: 1,
+          timeoutMs: 600_000,
+        });
+        setStatus('Claiming funds into your agent account…');
+        await consume({
+          accountId: agentId,
+          notes: faucetNotes.map((n) => n.inputNoteRecord()),
+        });
+        await sync();
+      }
 
-      // 2. Emit the register-note from the agent account.
+      // 2. Emit the register-note (a network note) from the agent account.
       setStatus('Step 1 of 2 — emitting your registration note…');
       const note = await buildRegisterNote(
         AccountId.fromHex(agentId),
@@ -156,10 +147,25 @@ export function Register() {
       await waitForCommit(emitted.transactionId, { timeoutMs: 60_000 });
       await sync();
 
-      // 3. Registry consumes the note (keys the agent by its authenticated id).
-      setStatus('Step 2 of 2 — the registry is processing your registration…');
-      await importAccount({ type: 'id', accountId: REGISTRY_ID });
-      await consumeAsRegistry(noteId);
+      // 3. The Miden network operator consumes the note AS the registry (which
+      //    keys the agent by its authenticated id). Nothing for us to submit —
+      //    poll the registry's storage until the agent shows up.
+      setStatus('Step 2 of 2 — the Miden network is processing your registration (usually ~10–30s)…');
+      const expected = decodeName([...encodeName(agentName.trim())]);
+      const deadline = Date.now() + OPERATOR_TIMEOUT_MS;
+      let registered = false;
+      while (Date.now() < deadline) {
+        const onChainName = await runExclusive(() => readAgentName(client, agentId));
+        if (onChainName === expected) { registered = true; break; }
+        await new Promise((r) => setTimeout(r, OPERATOR_POLL_MS));
+      }
+      if (!registered) {
+        throw new Error(
+          `Your registration note was sent (note ${noteId.slice(0, 12)}…), but the network ` +
+          `hasn't processed it yet. Check the leaderboard in a few minutes — ` +
+          `there's no need to register again.`,
+        );
+      }
 
       setStatus('');
       setDone(true);
@@ -171,8 +177,8 @@ export function Register() {
       setBusy(false);
     }
   }, [
-    client, agentId, agentName, sync, waitForConsumableNotes, consume,
-    execute, waitForCommit, importAccount, consumeAsRegistry, refresh,
+    client, runExclusive, agentId, agentName, sync, waitForConsumableNotes, consume,
+    execute, waitForCommit, refresh,
   ]);
 
   const shortId = agentId ? `${agentId.slice(0, 10)}…${agentId.slice(-6)}` : '';
@@ -187,6 +193,8 @@ export function Register() {
           Deploy your AI chess agent on Miden testnet and compete on-chain.
         </p>
       </div>
+
+      <SecureRebuildNotice />
 
       {error && <div className="alert-error">{error}</div>}
 
@@ -234,7 +242,8 @@ export function Register() {
                 <p style={{ color: '#888888', fontSize: 14, fontFamily: 'Space Grotesk' }}>
                   Your agent needs a little testnet USDCx to pay its own transaction fee.
                   Open the faucet, paste the address below (<span style={{ fontFamily: 'monospace' }}>{shortId}</span>),
-                  request funds, then come back and register.
+                  request funds, then come back and register. Re-registering an agent you funded
+                  before? Skip this step — it still has funds.
                 </p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <a className="connect-wallet-btn" href={FAUCET_URL} target="_blank" rel="noreferrer" style={{ textAlign: 'center', textDecoration: 'none' }}>
@@ -253,8 +262,8 @@ export function Register() {
               <div style={{ background: '#111111', border: '1px solid rgba(255,107,0,0.12)', borderRadius: 10, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <h2 style={{ fontFamily: 'Orbitron', fontSize: 14, color: '#FF6B00', letterSpacing: 1 }}>STEP 2 — NAME & REGISTER</h2>
                 <p style={{ color: '#555555', fontSize: 13, fontFamily: 'Space Grotesk' }}>
-                  This name appears on the leaderboard. Max 32 characters. Registration runs two
-                  transactions: your agent emits a registration note, then the registry processes it.
+                  This name appears on the leaderboard. Max 32 characters. Your agent sends one
+                  registration note; the Miden network then processes it automatically on the registry.
                 </p>
                 <input
                   className="text-input"

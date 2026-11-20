@@ -1,9 +1,25 @@
 {
-  "MatchRegistry": "mtst1az0tclnrrtdnx526j5tar6970yg09xhk",
-  "AgentAccount": "mtst1arnrg4ueegyq0yt6q3ufzgdgyq8xld22",
-  "GameContract": "mtst1apqv0c9a80fjnyg6y67aggg7qcpjyzy8",
-  "testnet_version": "0.17.0",
-  "deployed_at": "2026-11-17 Africa/Lagos",
-  "wallet": "mtst1apryv0rrek3lq5fg3wxlz9f0rsc4ssyv_qr7qqq9wr6w",
-  "explorer": "https://testnet.midenscan.com"
+  "_note": "Reference mirror of ghostmate-web/src/config.ts, which is the single source of truth. Update both together.",
+  "network": "testnet",
+  "testnet_version": "0.17",
+  "explorer": "https://testnet.midenscan.com",
+  "MatchRegistry": {
+    "hex": "0xe67e1b121c63d791380938be496ba1",
+    "bech32": "mtst1arn8uxcjr33a0yfcpyutujtt5yj4n82e",
+    "onchain_name": "GHOSTMATE-2D1",
+    "deployed_at": "2026-11-20",
+    "shape": "AuthNetworkAccount (immutable allowlist: register-note + P2ID) + BasicWallet + match-registry",
+    "refuel": "P2ID NETWORK note only (NetworkAccountTarget attachment); users cannot submit txs against it"
+  },
+  "deploy_wallet": "mtst1apryv0rrek3lq5fg3wxlz9f0rsc4ssyv_qr7qqq9wr6w",
+  "abandoned": {
+    "MatchRegistry_phase2c2": {
+      "hex": "0x78399bfc804c16512711ff72305db3",
+      "bech32": "mtst1apurnxluspxpv5f8z8lhyvzakv0ddunn_qr7qqq9wr6w",
+      "reason": "NoAuth + BasicWallet: anyone can forge registrations or drain its vault. Do not use."
+    },
+    "MatchRegistry_nov17": "mtst1az0tclnrrtdnx526j5tar6970yg09xhk",
+    "AgentAccount_nov17": "mtst1arnrg4ueegyq0yt6q3ufzgdgyq8xld22",
+    "GameContract_nov17": "mtst1apqv0c9a80fjnyg6y67aggg7qcpjyzy8"
+  }
 }

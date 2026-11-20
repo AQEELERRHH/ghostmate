@@ -10,6 +10,7 @@ import {
   FeltArray,
   Felt,
   NoteType,
+  NetworkAccountTarget,
   type AccountId,
 } from "@miden-sdk/miden-sdk";
 import { REGISTER_NOTE_PKG_URL } from "../config";
@@ -45,6 +46,11 @@ export async function loadRegisterNoteScript(): Promise<NoteScript> {
  * stamps that sender and it cannot be forged, so when the registry consumes the
  * note the script reads it via `get_sender()` and keys the agent by it. The
  * note storage carries the 4-felt encoded display name.
+ *
+ * Since Phase 2D.1 the registry is a network account: only the Miden network
+ * operator may execute its transactions. The note therefore carries a
+ * `NetworkAccountTarget` attachment, which makes it a network note that the
+ * operator consumes automatically (typically within ~10s of commit).
  */
 export async function buildRegisterNote(
   senderId: AccountId,
@@ -62,5 +68,12 @@ export async function buildRegisterNote(
     NoteType.Public,
     NoteTag.withAccountTarget(registryId),
   );
-  return new Note(new NoteAssets([]), metadata, recipient);
+  const target = new NetworkAccountTarget(registryId).toAttachment();
+  const note = Note.withAttachments(new NoteAssets([]), metadata, recipient, [target]);
+  if (!note.isNetworkNote()) {
+    // Without the attachment the operator ignores the note and it would sit
+    // unconsumed forever — refuse to emit rather than strand the user.
+    throw new Error("Internal error: registration note is not a network note.");
+  }
+  return note;
 }
